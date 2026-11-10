@@ -1,0 +1,78 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Arrange files into folders
+        run: |
+          mkdir -p lib assets/sounds
+          mv main.dart lib/
+          mv zikr*.wav assets/sounds/
+
+      - name: Create Android project files
+        run: |
+          flutter create . --platforms=android --project-name dhikr_reminder --org com.dhikr
+          rm -rf test
+
+      - name: Patch AndroidManifest and minSdk
+        run: |
+          python3 - <<'PY'
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p, encoding='utf-8').read()
+          perms = '''    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+              <uses-permission android:name="android.permission.WAKE_LOCK"/>
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+              <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+              '''
+          comps = '''
+              <service
+                  android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+                  android:foregroundServiceType="mediaPlayback"
+                  android:exported="false"/>
+              <receiver
+                  android:name="com.pravera.flutter_foreground_task.service.RebootReceiver"
+                  android:enabled="true"
+                  android:exported="true">
+                  <intent-filter>
+                      <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                      <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                  </intent-filter>
+              </receiver>
+          '''
+          s = s.replace('<application', perms + '<application', 1)
+          s = s.replace('</application>', comps + '</application>', 1)
+          s = s.replace('android:label="dhikr_reminder"', 'android:label="منبه الذاكرين"')
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+          for f in android/app/build.gradle.kts android/app/build.gradle; do
+            [ -f "$f" ] && sed -i -E 's/minSdk(Version)?\s*=?\s*(flutter\.minSdkVersion|[0-9]+)/minSdk = 24/' "$f"
+          done
+          grep -n "minSdk" android/app/build.gradle* || true
+
+      - run: flutter pub get
+
+      - run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dhikr-reminder-apk
+          path: build/app/outputs/flutter-apk/app-release.apk

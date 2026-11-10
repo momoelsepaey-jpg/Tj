@@ -1,0 +1,18 @@
+name: dhikr_reminder
+description: منبه الذاكرين - تذكير صوتي تلقائي
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_foreground_task: ^8.17.0
+  audioplayers: ^6.1.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/sounds/
